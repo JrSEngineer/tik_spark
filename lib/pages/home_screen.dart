@@ -15,22 +15,34 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final PageController _pageController = PageController();
-
   final ValueNotifier<List<FeedVideoModel>> _videos = ValueNotifier([]);
-
+  final PageController _pageController = PageController();
   late ChewieController _videoController;
-
   final _feedGeneratorUri = bsky.AtUri.parse('at://did:plc:z72i7hdynmk6r22z27h6tvur/app.bsky.feed.generator/thevids');
+
+  final ValueNotifier<bool> _loadingVideos = ValueNotifier(false);
+
+  late bsky.FeedService _feed;
 
   @override
   void initState() {
     super.initState();
 
-    _loadFeed();
+    Future.delayed(
+      const Duration(milliseconds: 500),
+      () async {
+        _feed = await _getFeedService();
+        await _loadFeed(_feed);
+      },
+    );
 
-    _pageController.addListener(() {
-      _videoController.pause();
+    Future.delayed(const Duration(seconds: 1));
+
+    _pageController.addListener(() async {
+      bool listEndReached = _pageController.position.maxScrollExtent == _pageController.offset;
+      if (listEndReached) {
+        await _loadFeed(_feed);
+      }
     });
   }
 
@@ -42,17 +54,22 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> _loadFeed() async {
+  Future<bsky.FeedService> _getFeedService() async {
+    _loadingVideos.value = true;
+
     final session = await bsky.createSession(
       identifier: 'jrzanka.bsky.social',
       password: '1614181151Bs!',
     );
 
-    _videos.value.clear();
-
     final bluesky = bsky.Bluesky.fromSession(session.data);
-    final feed = await bluesky.feed.getFeed(generatorUri: _feedGeneratorUri, limit: 5);
-    final result = feed.data.toJson()['feed'];
+
+    return bluesky.feed;
+  }
+
+  Future<void> _loadFeed(bsky.FeedService feed) async {
+    final blueskyFeed = await feed.getFeed(generatorUri: _feedGeneratorUri, limit: 5);
+    final result = blueskyFeed.data.toJson()['feed'];
 
     log(result.toString().replaceAll('{', '{\n').replaceAll('}', '\n}').replaceAll(',', ',\n'));
 
@@ -62,6 +79,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _videos.value.add(video);
       return video;
     }).toList();
+
+    _loadingVideos.value = false;
 
     _videos.notifyListeners();
   }
@@ -75,83 +94,98 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (context, value, child) {
             return _videos.value.isEmpty
                 ? const Center(child: CircularProgressIndicator())
-                : PageView.builder(
-                    scrollDirection: Axis.vertical,
-                    physics: const BouncingScrollPhysics(),
-                    controller: _pageController,
-                    itemCount: _videos.value.length,
-                    itemBuilder: (context, index) {
-                      final video = _videos.value[index];
+                : _loadingVideos.value
+                    ? const Center(child: CircularProgressIndicator())
+                    : RefreshIndicator(
+                        onRefresh: () => _loadFeed(_feed),
+                        child: PageView.builder(
+                          scrollDirection: Axis.vertical,
+                          controller: _pageController,
+                          itemCount: _videos.value.length + 1,
+                          itemBuilder: (context, index) {
+                            bool hasVideosLeft = index < _videos.value.length;
 
-                      _videoController = ChewieController(
-                        autoPlay: false,
-                        deviceOrientationsAfterFullScreen: [
-                          DeviceOrientation.portraitUp,
-                        ],
-                        deviceOrientationsOnEnterFullScreen: [
-                          DeviceOrientation.portraitUp,
-                        ],
-                        playbackSpeeds: [1, 1.5, 2],
-                        draggableProgressBar: false,
-                        autoInitialize: true,
-                        aspectRatio: 9 / 16,
-                        allowPlaybackSpeedChanging: false,
-                        looping: true,
-                        zoomAndPan: false,
-                        showControlsOnInitialize: false,
-                        allowFullScreen: true,
-                        allowMuting: true,
-                        fullScreenByDefault: true,
-                        videoPlayerController: VideoPlayerController.networkUrl(Uri.parse(video.videoUrl)),
-                        subtitle: Subtitles([
-                          Subtitle(
-                            text: video.authorName,
-                            start: const Duration(seconds: 0),
-                            end: const Duration(seconds: 0),
-                            index: index,
-                          ),
-                        ]),
-                      );
+                            if (hasVideosLeft) {
+                              final video = _videos.value[index];
 
-                      return Stack(
-                        children: [
-                          Chewie(
-                            controller: _videoController,
-                          ),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 54,
-                                height: 54,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  image: DecorationImage(
-                                    image: NetworkImage(video.authorAvatar),
+                              _videoController = ChewieController(
+                                autoPlay: false,
+                                deviceOrientationsAfterFullScreen: [
+                                  DeviceOrientation.portraitUp,
+                                ],
+                                deviceOrientationsOnEnterFullScreen: [
+                                  DeviceOrientation.portraitUp,
+                                ],
+                                playbackSpeeds: [1, 1.5, 2],
+                                draggableProgressBar: false,
+                                startAt: const Duration(milliseconds: 300),
+                                autoInitialize: true,
+                                aspectRatio: 2 / 3,
+                                allowPlaybackSpeedChanging: false,
+                                looping: true,
+                                zoomAndPan: false,
+                                showControlsOnInitialize: false,
+                                allowFullScreen: true,
+                                allowMuting: true,
+                                fullScreenByDefault: true,
+                                videoPlayerController: VideoPlayerController.networkUrl(Uri.parse(video.videoUrl)),
+                                subtitle: Subtitles([
+                                  Subtitle(
+                                    text: video.authorName,
+                                    start: const Duration(seconds: 0),
+                                    end: const Duration(seconds: 0),
+                                    index: index,
                                   ),
-                                ),
-                              ),
-                              const SizedBox(width: 24),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                ]),
+                              );
+
+                              return Stack(
                                 children: [
-                                  Text(
-                                    video.authorName,
-                                    style: const TextStyle(color: Colors.white, fontSize: 20),
+                                  Chewie(
+                                    controller: _videoController,
                                   ),
-                                  Text(
-                                    video.handle,
-                                    style: const TextStyle(color: Colors.grey),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        width: 54,
+                                        height: 54,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          image: DecorationImage(
+                                            image: NetworkImage(video.authorAvatar),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 24),
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            video.authorName,
+                                            style: const TextStyle(color: Colors.white, fontSize: 20),
+                                          ),
+                                          Text(
+                                            video.handle,
+                                            style: const TextStyle(color: Colors.grey),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ],
-                              ),
-                            ],
-                          ),
-                        ],
+                              );
+                            } else {
+                              return const SizedBox.shrink(
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
+                              );
+                            }
+                          },
+                        ),
                       );
-                    },
-                  );
           },
         ),
       ),
