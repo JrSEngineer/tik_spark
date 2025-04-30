@@ -24,12 +24,17 @@ dependencies:
   flutter_secure_storage: ^9.0.0
   atproto: ^0.11.5
   bluesky: ^0.15.8
-
+  
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
+  flutter_launcher_icons: ^0.13.1
   flutter_lints: ^2.0.0
 
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ioa: true
+  image_path: "assets/logo/logo.png"
+  
 flutter:
   uses-material-design: true
