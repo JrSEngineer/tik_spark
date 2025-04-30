@@ -2,10 +2,10 @@ import 'dart:developer';
 
 import 'package:bluesky/bluesky.dart' as bsky;
 import 'package:chewie/chewie.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:tik_spark/models/feed_video_model.dart';
-import 'package:video_player/video_player.dart';
+import 'package:tik_spark/widgets/video_player_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -57,9 +57,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<bsky.FeedService> _getFeedService() async {
     _loadingVideos.value = true;
 
+    final Dio dio = Dio();
+
+    final response = await dio.get('https://spark-dev.up.railway.app/bsky-credentials');
+
     final session = await bsky.createSession(
-      identifier: 'jrzanka.bsky.social',
-      password: '1614181151Bs!',
+      identifier: response.data['identifier'],
+      password: response.data['password'],
     );
 
     final bluesky = bsky.Bluesky.fromSession(session.data);
@@ -108,74 +112,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             if (hasVideosLeft) {
                               final video = _videos.value[index];
 
-                              _videoController = ChewieController(
-                                autoPlay: false,
-                                deviceOrientationsAfterFullScreen: [
-                                  DeviceOrientation.portraitUp,
-                                ],
-                                deviceOrientationsOnEnterFullScreen: [
-                                  DeviceOrientation.portraitUp,
-                                ],
-                                playbackSpeeds: [1, 1.5, 2],
-                                draggableProgressBar: false,
-                                startAt: const Duration(milliseconds: 300),
-                                autoInitialize: true,
-                                aspectRatio: 2 / 3,
-                                allowPlaybackSpeedChanging: false,
-                                looping: true,
-                                zoomAndPan: false,
-                                showControlsOnInitialize: false,
-                                allowFullScreen: true,
-                                allowMuting: true,
-                                fullScreenByDefault: true,
-                                videoPlayerController: VideoPlayerController.networkUrl(Uri.parse(video.videoUrl)),
-                                subtitle: Subtitles([
-                                  Subtitle(
-                                    text: video.authorName,
-                                    start: const Duration(seconds: 0),
-                                    end: const Duration(seconds: 0),
-                                    index: index,
-                                  ),
-                                ]),
-                              );
-
-                              return Stack(
-                                children: [
-                                  Chewie(
-                                    controller: _videoController,
-                                  ),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                        width: 54,
-                                        height: 54,
-                                        decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          image: DecorationImage(
-                                            image: NetworkImage(video.authorAvatar),
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 24),
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            video.authorName,
-                                            style: const TextStyle(color: Colors.white, fontSize: 20),
-                                          ),
-                                          Text(
-                                            video.handle,
-                                            style: const TextStyle(color: Colors.grey),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              );
+                              return VideoPlayerWidget(video: video, index: index);
                             } else {
                               return const SizedBox.shrink(
                                 child: Center(
